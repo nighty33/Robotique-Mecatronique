@@ -225,14 +225,15 @@ class RobotRT(RobotModel):
 
     def computeJacobian(self, joints):
         # TODO: implement
-        c1 = np.cos(joints[0])
-        c2 = np.cos(joints[1])
-        s1 = np.sin(joints[0])
-        s2 = np.sin(joints[1])
+        T_0_1 = self.T_0_1 @ ht.rot_z(joints[0])
+        T_1_2 = self.T_1_2 @ ht.translation(joints[1] * np.array([1, 0, 0]))
+        
+        dev_T_q1 = self.T_0_1 @ ht.d_rot_z(joints[0]) @ T_1_2 @ self.T_2_E
+        dev_T_q2 = T_0_1 @ self.T_1_2 @ htd_.translation(joints[1] * np.array([1, 0, 0])) @ self.T_2_E
         
         J = np.zeros((2, 2), dtype=np.double)
-        J = [[-self.L1*s1 + self.L2*(-c1*s2 - c2*s1) self.L2*(-c1*s2 - c2*s1)]
-            [self.L1*c1 + self.L2*(c1*c2 - s1*s2) self.L2*(c1*c2 - s1*s2)]]
+        J[:, 0] = dev_T_q1.T
+        J[:, 1] = dev_T_q2.T
         return J
 
 
@@ -280,7 +281,18 @@ class RobotRRR(RobotModel):
 
     def computeJacobian(self, joints):
         # TODO: implement
+        T_0_1 = self.T_0_1 @ ht.rot_z(joints[0])
+        T_1_2 = self.T_1_2 @ ht.rot_x(joints[1])
+        T_2_3 = self.T_2_3 @ ht.rot_x(joints[2])
+        
+        dev_T_q1 = self.T_0_1 @ ht.d_rot_z(joints[0]) @ T_1_2 @ T_2_3 @ self.T_3_E
+        dev_T_q2 = T_0_1 @ self.T_1_2 @ ht.d_rot_x(joints[1]) @ T_2_3 @ self.T_3_E
+        dev_T_q3 = T_0_1 @ T_1_2 @ self.T_2_3 @ ht.d_rot_x(joints[2]) @ self.T_3_E
+        
         J = np.zeros((3, 3), dtype=np.double)
+        J[:, 0] = dev_T_q1.T
+        J[:, 1] = dev_T_q2.T
+        J[:, 2] = dev_T_q3.T
         return J
 
 

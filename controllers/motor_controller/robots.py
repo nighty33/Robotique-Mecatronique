@@ -225,7 +225,14 @@ class RobotRT(RobotModel):
 
     def computeJacobian(self, joints):
         # TODO: implement
+        c1 = np.cos(joints[0])
+        c2 = np.cos(joints[1])
+        s1 = np.sin(joints[0])
+        s2 = np.sin(joints[1])
+        
         J = np.zeros((2, 2), dtype=np.double)
+        J = [[-self.L1*s1 + self.L2*(-c1*s2 - c2*s1) self.L2*(-c1*s2 - c2*s1)]
+            [self.L1*c1 + self.L2*(c1*c2 - s1*s2) self.L2*(c1*c2 - s1*s2)]]
         return J
 
 

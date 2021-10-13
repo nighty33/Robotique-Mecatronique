@@ -168,19 +168,29 @@ class RobotModel:
             The wished target for the tool in operational space
         """
         # TODO: implement
-        J = self.computeJacobian(joints)
+        iter = 0
+        max_step = 0.1
         size = len(target)
+        J = None
         inv_J = None
-        a = np.zeros(size)
-
-        if np.linalg.det(J) != 0:
-            inv_J = np.linalg.inv(J)
-        else:
-            a[:] = np.random.uniform(0.0,0.1)
-            
-        vec_epsilon = inv_J @ (target - self.computeMGD(joints+a))
-        print(vec_epsilon)
-        return vec_epsilon
+        deg_tol = self.W
+        v_dist = (target - self.computeMGD(joints))
+        while np.linalg.norm(v_dist) > deg_tol and iter < 5000:
+            a = np.zeros(size)
+            J = self.computeJacobian(joints)
+            if np.linalg.det(J) != 0:
+                inv_J = np.linalg.inv(J)
+                v_dist = (target - self.computeMGD(joints))
+                epsilon = inv_J @ v_dist
+                if np.linalg.norm(epsilon) > max_step:
+                    epsilon = epsilon/np.linalg.norm(epsilon)*max_step
+                joints = joints + epsilon
+            else:
+                for i in range(size):
+                    a[i] = np.random.uniform(0.0, 0.1)
+                joints = joints + a
+            iter+=1
+        return joints
 
     def solveJacTransposed(self, joints, target):
         """
@@ -201,6 +211,7 @@ class RobotRT(RobotModel):
 
     The operational space of the robot is 2 dimensional because it can only move inside a plane
     """
+
     def __init__(self):
         self.W = 0.05
         self.L0 = 1.0
@@ -224,10 +235,10 @@ class RobotRT(RobotModel):
         # TODO: implement
         size_R = self.L0+self.W/2
         size_B = self.L1
-        
+
         d_min = self.L2
         d_max = np.sqrt(np.pow(self.L2) + np.pow(self.L1))
-        
+
         return np.array([[d_min, d_max],  [d_min, d_max]])
 
     def getBaseFromToolTransform(self, joints):
@@ -247,13 +258,14 @@ class RobotRT(RobotModel):
         # TODO: implement
         T_0_1 = self.T_0_1 @ ht.rot_z(joints[0])
         T_1_2 = self.T_1_2 @ ht.translation(joints[1] * np.array([1, 0, 0]))
-        
+
         dev_T_q1 = self.T_0_1 @ ht.d_rot_z(joints[0]) @ T_1_2 @ self.T_2_E
-        dev_T_q2 = T_0_1 @ self.T_1_2 @ ht.d_translation(joints[1] * np.array([1, 0, 0])) @ self.T_2_E
-        
+        dev_T_q2 = T_0_1 @ self.T_1_2 @ ht.d_translation(
+            joints[1] * np.array([1, 0, 0])) @ self.T_2_E
+
         J = np.zeros((2, 2), dtype=np.double)
-        J[:, 0] = dev_T_q1[:2,-1]
-        J[:, 1] = dev_T_q2[:2,-1]
+        J[:, 0] = dev_T_q1[:2, -1]
+        J[:, 1] = dev_T_q2[:2, -1]
         return J
 
 
@@ -261,6 +273,7 @@ class RobotRRR(RobotModel):
     """
     Model a robot with 3 degrees of freedom along different axis
     """
+
     def __init__(self):
         self.W = 0.05
         self.L0 = 1.0 + self.W/2
@@ -283,12 +296,12 @@ class RobotRRR(RobotModel):
 
     def getOperationalDimensionLimits(self):
         # TODO: implement
-        
-        xy_min = -(L1+L2+L3)
-        xy_max = L1+L2+L3
-        z_min = -(L2+L3)
-        z_max = L2+L3
-        
+
+        xy_min = -(self.L1+self.L2+self.L3)
+        xy_max = self.L1+self.L2+self.L3
+        z_min = -(self.L2+self.L3)
+        z_max = self.L2+self.L3
+
         return np.array([[xy_min, xy_max], [xy_min, xy_max], [z_min, z_max]])
 
     def getBaseFromToolTransform(self, joints):
@@ -310,15 +323,18 @@ class RobotRRR(RobotModel):
         T_0_1 = self.T_0_1 @ ht.rot_z(joints[0])
         T_1_2 = self.T_1_2 @ ht.rot_x(joints[1])
         T_2_3 = self.T_2_3 @ ht.rot_x(joints[2])
-        
-        dev_T_q1 = self.T_0_1 @ ht.d_rot_z(joints[0]) @ T_1_2 @ T_2_3 @ self.T_3_E
-        dev_T_q2 = T_0_1 @ self.T_1_2 @ ht.d_rot_x(joints[1]) @ T_2_3 @ self.T_3_E
-        dev_T_q3 = T_0_1 @ T_1_2 @ self.T_2_3 @ ht.d_rot_x(joints[2]) @ self.T_3_E
-        
+
+        dev_T_q1 = self.T_0_1 @ ht.d_rot_z(joints[0]
+                                           ) @ T_1_2 @ T_2_3 @ self.T_3_E
+        dev_T_q2 = T_0_1 @ self.T_1_2 @ ht.d_rot_x(
+            joints[1]) @ T_2_3 @ self.T_3_E
+        dev_T_q3 = T_0_1 @ T_1_2 @ self.T_2_3 @ ht.d_rot_x(
+            joints[2]) @ self.T_3_E
+
         J = np.zeros((3, 3), dtype=np.double)
-        J[:, 0] = dev_T_q1[:3,-1]
-        J[:, 1] = dev_T_q2[:3,-1]
-        J[:, 2] = dev_T_q3[:3,-1]
+        J[:, 0] = dev_T_q1[:3, -1]
+        J[:, 1] = dev_T_q2[:3, -1]
+        J[:, 2] = dev_T_q3[:3, -1]
         return J
 
 
@@ -326,9 +342,20 @@ class LegRobot(RobotModel):
     """
     Model of a simple robot leg with 4 degrees of freedom
     """
+
     def __init__(self):
         # TODO: implement
-        pass
+        self.W = 0.05
+        self.L0 = 1.0
+        self.L1 = 0.5
+        self.L2 = 0.3
+        self.L3 = 0.3
+        self.L4 = 0.2
+        self.T_0_1 = ht.translation([0, 0, self.L0])
+        self.T_1_2 = ht.translation([0, self.L1, 0])
+        self.T_2_3 = ht.translation([0.0, self.L2, 0])
+        self.T_3_4 = ht.translation([0.0, self.L3, 0])
+        self.T_4_E = ht.translation([0.0, self.L4, 0])
 
     def getJointsNames(self):
         return ["q1", "q2", "q3", "q4"]

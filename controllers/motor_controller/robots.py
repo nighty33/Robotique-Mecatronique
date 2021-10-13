@@ -208,7 +208,13 @@ class RobotRT(RobotModel):
 
     def getOperationalDimensionLimits(self):
         # TODO: implement
-        return np.array([[-1, 1],  [-1, 1]])
+        size_R = self.L0+self.W/2
+        size_B = self.L1
+        
+        d_min = self.L2
+        d_max = np.sqrt(np.pow(self.L2) + np.pow(self.L1))
+        
+        return np.array([[d_min, d_max],  [d_min, d_max]])
 
     def getBaseFromToolTransform(self, joints):
         T_0_1 = self.T_0_1 @ ht.rot_z(joints[0])
@@ -229,11 +235,11 @@ class RobotRT(RobotModel):
         T_1_2 = self.T_1_2 @ ht.translation(joints[1] * np.array([1, 0, 0]))
         
         dev_T_q1 = self.T_0_1 @ ht.d_rot_z(joints[0]) @ T_1_2 @ self.T_2_E
-        dev_T_q2 = T_0_1 @ self.T_1_2 @ htd_.translation(joints[1] * np.array([1, 0, 0])) @ self.T_2_E
+        dev_T_q2 = T_0_1 @ self.T_1_2 @ ht.d_translation(joints[1] * np.array([1, 0, 0])) @ self.T_2_E
         
         J = np.zeros((2, 2), dtype=np.double)
-        J[:, 0] = dev_T_q1.T
-        J[:, 1] = dev_T_q2.T
+        J[:, 0] = dev_T_q1[:2,-1]
+        J[:, 1] = dev_T_q2[:2,-1]
         return J
 
 
@@ -263,6 +269,8 @@ class RobotRRR(RobotModel):
 
     def getOperationalDimensionLimits(self):
         # TODO: implement
+        
+        
         return np.array([[-1, 1], [-1, 1], [-1, 1]])
 
     def getBaseFromToolTransform(self, joints):
@@ -290,9 +298,9 @@ class RobotRRR(RobotModel):
         dev_T_q3 = T_0_1 @ T_1_2 @ self.T_2_3 @ ht.d_rot_x(joints[2]) @ self.T_3_E
         
         J = np.zeros((3, 3), dtype=np.double)
-        J[:, 0] = dev_T_q1.T
-        J[:, 1] = dev_T_q2.T
-        J[:, 2] = dev_T_q3.T
+        J[:, 0] = dev_T_q1[:3,-1]
+        J[:, 1] = dev_T_q2[:3,-1]
+        J[:, 2] = dev_T_q3[:3,-1]
         return J
 
 

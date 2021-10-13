@@ -1,5 +1,7 @@
 import numpy as np
 from abc import abstractmethod
+
+from numpy import random
 import homogeneous_transform as ht
 
 
@@ -166,7 +168,19 @@ class RobotModel:
             The wished target for the tool in operational space
         """
         # TODO: implement
-        return joints
+        J = self.computeJacobian(joints)
+        size = len(target)
+        inv_J = None
+        a = np.zeros(size)
+
+        if np.linalg.det(J) != 0:
+            inv_J = np.linalg.inv(J)
+        else:
+            a[:] = np.random.uniform(0.0,0.1)
+            
+        vec_epsilon = inv_J @ (target - self.computeMGD(joints+a))
+        print(vec_epsilon)
+        return vec_epsilon
 
     def solveJacTransposed(self, joints, target):
         """
@@ -270,8 +284,12 @@ class RobotRRR(RobotModel):
     def getOperationalDimensionLimits(self):
         # TODO: implement
         
+        xy_min = -(L1+L2+L3)
+        xy_max = L1+L2+L3
+        z_min = -(L2+L3)
+        z_max = L2+L3
         
-        return np.array([[-1, 1], [-1, 1], [-1, 1]])
+        return np.array([[xy_min, xy_max], [xy_min, xy_max], [z_min, z_max]])
 
     def getBaseFromToolTransform(self, joints):
         T_0_1 = self.T_0_1 @ ht.rot_z(joints[0])

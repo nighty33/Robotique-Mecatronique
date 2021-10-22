@@ -3,6 +3,39 @@ from abc import abstractmethod
 
 from numpy import random
 import homogeneous_transform as ht
+import math
+
+from scipy import optimize
+
+
+
+tol = 1e-9
+
+def cosine_rule(x,y,z, L0, L1 , L2 , L3):
+    solutions = []
+    dist = math.sqrt((abs(y-L1))**2+abs((z-L0))**2)
+
+    if dist > (L1 + L2) or (dist < abs(L1 - L2)):
+        return solutions
+    
+    phi = math.atan2(y, z)
+    alpha = math.acos((L1**2+dist**2 - L2**2) / (2*L1* dist))
+    beta = math.acos((L1**2+ L2**2 - dist**2) / (2*L1* L2))
+    solutions.append(np.array([phi+alpha, beta - np.pi]))
+
+    if dist != L1 + L2:
+        solutions.append(np.array([ phi-alpha, np.pi - beta]))
+
+    #print("Dist:" , dist , "phi" , phi , "alpha" , alpha , "beta" , beta)
+    return solutions
+
+def distance(joints, self ,target):
+    return np.linalg.norm(self.computeMGD(joints) - target , 2)
+
+def jacobian_function(joints, self, target):
+    J = self.computeJacobian(joints)
+    config = self.computeMGD(joints)
+    return -2 * J[0:3].transpose() @ (target - config[:3])
 
 
 class RobotModel:
@@ -173,7 +206,7 @@ class RobotModel:
         size = len(target)
         J = None
         inv_J = None
-        deg_tol = self.W
+        deg_tol = 0.001
         v_dist = (target - self.computeMGD(joints))
         while np.linalg.norm(v_dist) > deg_tol and iter < 5000:
             a = np.zeros(size)
@@ -187,22 +220,17 @@ class RobotModel:
                 joints = joints + epsilon
             else:
                 for i in range(size):
-                    a[i] = np.random.uniform(0.0, 0.1)
+                    a[i] = np.random.uniform(0.0, 0.01)
                 joints = joints + a
             iter+=1
+
         return joints
 
     def solveJacTransposed(self, joints, target):
-        """
-        Parameters
-        ----------
-        joints: np.ndarray shape(n,)
-            The initial position for the search in angular space
-        target: np.ndarray shape(n,)
-            The wished target for the tool in operational space
-        """
-        # TODO: implement
-        return joints
+
+        result = optimize.minimize(distance, joints, (self, target), jac=jacobian_function)
+
+        return result.x
 
 
 class RobotRT(RobotModel):
@@ -232,14 +260,9 @@ class RobotRT(RobotModel):
         return ["x", "y"]
 
     def getOperationalDimensionLimits(self):
-        # TODO: implement
-        size_R = self.L0+self.W/2
-        size_B = self.L1
+        dimension = math.sqrt(self.L2**2 + self.L1**2)
 
-        d_min = self.L2
-        d_max = np.sqrt(np.pow(self.L2) + np.pow(self.L1))
-
-        return np.array([[d_min, d_max],  [d_min, d_max]])
+        return np.array([[-dimension, dimension],  [-dimension, dimension]])
 
     def getBaseFromToolTransform(self, joints):
         T_0_1 = self.T_0_1 @ ht.rot_z(joints[0])
@@ -251,8 +274,19 @@ class RobotRT(RobotModel):
         return tool_pos[:2]
 
     def analyticalMGI(self, target):
-        # TODO: implement
-        return 0, np.array([0, 0], dtype=np.double)
+        x = target[0]
+        y = target[1]
+
+        dist = np.linalg.norm(target[:2])
+        min = math.sqrt(self.max_q1**2 + self.L1**2)
+        max = math.sqrt(self.max_q1**2 + (self.L1+self.max_q1)**2 )
+        if dist < min or dist > max:
+            return 0 , [0,0]
+
+        angle1 = math.atan2(y, x)
+        dist_cur = math.sqrt( (dist**2) - (self.max_q1**2))
+        angle2= math.atan2(self.max_q1,dist_cur)
+        return 1, [angle1+angle2, dist_cur-self.L1]
 
     def computeJacobian(self, joints):
         # TODO: implement
@@ -295,14 +329,11 @@ class RobotRRR(RobotModel):
         return ["x", "y", "z"]
 
     def getOperationalDimensionLimits(self):
-        # TODO: implement
+        dim_x = self.L1+self.L2+self.L3
+        dim_y = dim_x
+        dim_z = self.L2+self.L3
 
-        xy_min = -(self.L1+self.L2+self.L3)
-        xy_max = self.L1+self.L2+self.L3
-        z_min = -(self.L2+self.L3)
-        z_max = self.L2+self.L3
-
-        return np.array([[xy_min, xy_max], [xy_min, xy_max], [z_min, z_max]])
+        return np.array([[-dim_x,dim_x],[-dim_y,dim_y],[self.L0-dim_z,self.L0+dim_z]])
 
     def getBaseFromToolTransform(self, joints):
         T_0_1 = self.T_0_1 @ ht.rot_z(joints[0])
@@ -315,8 +346,24 @@ class RobotRRR(RobotModel):
         return tool_pos[:3]
 
     def analyticalMGI(self, target):
-        # TODO: implement
-        return 1, np.array([0, 0, 0], dtype=np.double)
+        x=target[0] 
+        y=target[1] 
+        z=target[2] 
+
+        theta = math.atan2(x, y)
+        joints = []
+        dist = np.linalg.norm(target[:2])
+
+        for q0 in [theta, theta - np.pi]:
+            for q in cosine_rule(x, y, z, self.L0, self.L1 , self.L2 , self.L3):
+                joints.append(np.array([-q0 , -q[0] , -q[1]]))
+        
+        if len(joints) == 0:
+            return 0, [0,0,0]
+            
+        #print(joints[0][0],joints[0][1],joints[0][2])
+        #print(len(joints))
+        return len(joints), np.array(joints[0], dtype=np.double)
 
     def computeJacobian(self, joints):
         # TODO: implement

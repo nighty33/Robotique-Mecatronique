@@ -13,7 +13,12 @@ import robots
 
 ALLOWED_MODES = ['computeMGD', 'analyticalMGI', 'jacobianInverse', 'jacobianTransposed']
 DEFAULT_CONTROL_MODE = 'analyticalMGI'  # The mode used for the simulation see ALLOWED_MODES
-DEFAULT_ROBOT = 'RobotRRR'
+# DEFAULT_CONTROL_MODE = 'jacobianInverse'  # The mode used for the simulation see ALLOWED_MODES
+# DEFAULT_CONTROL_MODE = 'jacobianTransposed'  # The mode used for the simulation see ALLOWED_MODES
+
+# DEFAULT_ROBOT = 'RobotRT'
+# DEFAULT_ROBOT = 'RobotRRR'
+DEFAULT_ROBOT = 'LegRobot'
 
 # Setting parameters from environment variables
 control_mode = os.environ.get('CONTROL_MODE', DEFAULT_CONTROL_MODE)

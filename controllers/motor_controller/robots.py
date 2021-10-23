@@ -29,14 +29,6 @@ def cosine_rule(x,y,z, L0, L1 , L2 , L3):
     #print("Dist:" , dist , "phi" , phi , "alpha" , alpha , "beta" , beta)
     return solutions
 
-def distance(joints, self ,target):
-    return np.linalg.norm(self.computeMGD(joints) - target , 2)
-
-def jacobian_function(joints, self, target):
-    J = self.computeJacobian(joints)
-    config = self.computeMGD(joints)
-    return -2 * J[0:3].transpose() @ (target - config[:3])
-
 
 class RobotModel:
     def getNbJoints(self):
@@ -208,27 +200,39 @@ class RobotModel:
         inv_J = None
         deg_tol = 0.001
         v_dist = (target - self.computeMGD(joints))
-        while np.linalg.norm(v_dist) > deg_tol and iter < 5000:
+        while np.linalg.norm(v_dist) > deg_tol and iter < 50:
             a = np.zeros(size)
             J = self.computeJacobian(joints)
-            if np.linalg.det(J) != 0:
-                inv_J = np.linalg.inv(J)
-                v_dist = (target - self.computeMGD(joints))
-                epsilon = inv_J @ v_dist
-                if np.linalg.norm(epsilon) > max_step:
-                    epsilon = epsilon/np.linalg.norm(epsilon)*max_step
-                joints = joints + epsilon
+            if(J.shape[0]==J.shape[1]):
+                if np.linalg.det(J) != 0:
+                    inv_J = np.linalg.inv(J)
+                    v_dist = (target - self.computeMGD(joints))
+                    epsilon = inv_J @ v_dist
+                    if np.linalg.norm(epsilon) > max_step:
+                        epsilon = epsilon/np.linalg.norm(epsilon)*max_step
+                    joints = joints + epsilon
+                else:
+                    for i in range(size):
+                        a[i] = np.random.uniform(0.0, 0.01)
+                    joints = joints + a
             else:
-                for i in range(size):
-                    a[i] = np.random.uniform(0.0, 0.01)
-                joints = joints + a
+                raise RuntimeError("Matrix non-invertible: '" + J + "'")
             iter+=1
 
         return joints
 
+    def distance(self, joints ,target):
+        return np.linalg.norm(self.computeMGD(joints) - target , 2)
+
+    def jacobian_function(self, joints, target):
+        size = len(joints)
+        J = self.computeJacobian(joints)
+        v_dist = (target - self.computeMGD(joints))
+        return -2 * J.transpose() @ v_dist
+
     def solveJacTransposed(self, joints, target):
 
-        result = optimize.minimize(distance, joints, (self, target), jac=jacobian_function)
+        result = optimize.minimize(self.distance, joints, target, jac=self.jacobian_function)
 
         return result.x
 
@@ -294,8 +298,7 @@ class RobotRT(RobotModel):
         T_1_2 = self.T_1_2 @ ht.translation(joints[1] * np.array([1, 0, 0]))
 
         dev_T_q1 = self.T_0_1 @ ht.d_rot_z(joints[0]) @ T_1_2 @ self.T_2_E
-        dev_T_q2 = T_0_1 @ self.T_1_2 @ ht.d_translation(
-            joints[1] * np.array([1, 0, 0])) @ self.T_2_E
+        dev_T_q2 = T_0_1 @ self.T_1_2 @ ht.d_translation(np.array([1, 0, 0])) @ self.T_2_E
 
         J = np.zeros((2, 2), dtype=np.double)
         J[:, 0] = dev_T_q1[:2, -1]
@@ -419,11 +422,18 @@ class LegRobot(RobotModel):
 
     def getOperationalDimensionLimits(self):
         # TODO: implement
-        return np.array([[-1, 1], [-1, 1], [-1, 1], [-1, 1]])
+        dim_x = self.L1+self.L2+self.L3+self.L4
+        dim_y = dim_x
+        dim_z = self.L2+self.L3+self.L4
+        return np.array([[-dim_x,dim_x],[-dim_y,dim_y],[self.L0-dim_z,self.L0+dim_z]])
 
     def getBaseFromToolTransform(self, joints):
         # TODO: implement
-        raise NotImplementedError()
+        T_0_1 = self.T_0_1 @ ht.rot_z(joints[0])
+        T_1_2 = self.T_1_2 @ ht.rot_x(joints[1])
+        T_2_3 = self.T_2_3 @ ht.rot_x(joints[2])
+        T_3_4 = self.T_3_4 @ ht.rot_x(joints[3])
+        return T_0_1 @ T_1_2 @ T_2_3 @ T_3_4 @ self.T_4_E
 
     def extractMGD(self, T):
         """
@@ -431,11 +441,12 @@ class LegRobot(RobotModel):
            An homogeneous transformation matrix
         """
         # TODO: implement
-        raise NotImplementedError()
+        return 
 
     def computeMGD(self, joints):
         # TODO: implement
-        raise NotImplementedError()
+        T = self.getBaseFromToolTransform(joints)
+        return np.append(T[:-1, -1], T[1,2])
 
     def analyticalMGI(self, target):
         # TODO: implement
@@ -443,7 +454,26 @@ class LegRobot(RobotModel):
 
     def computeJacobian(self, joints):
         # TODO: implement
-        raise NotImplementedError()
+        T_0_1 = self.T_0_1 @ ht.rot_z(joints[0])
+        T_1_2 = self.T_1_2 @ ht.rot_x(joints[1])
+        T_2_3 = self.T_2_3 @ ht.rot_x(joints[2])
+        T_3_4 = self.T_3_4 @ ht.rot_x(joints[3])
+
+        dev_T_q1 = self.T_0_1 @ ht.d_rot_z(joints[0]
+            ) @ T_1_2 @ T_2_3 @ T_3_4 @ self.T_4_E
+        dev_T_q2 = T_0_1 @ self.T_1_2 @ ht.d_rot_x(
+            joints[1]) @ T_2_3 @ T_3_4 @ self.T_4_E
+        dev_T_q3 = T_0_1 @ T_1_2 @ self.T_2_3 @ ht.d_rot_x(
+            joints[2]) @ T_3_4 @ self.T_4_E
+        dev_T_q4 = T_0_1 @ T_1_2 @ T_2_3 @ self.T_3_4 @ ht.d_rot_x(
+            joints[3]) @ self.T_4_E
+
+        J = np.zeros((3, 4), dtype=np.double)
+        J[:, 0] = dev_T_q1[:3, -1]
+        J[:, 1] = dev_T_q2[:3, -1]
+        J[:, 2] = dev_T_q3[:3, -1]
+        J[:, 3] = dev_T_q4[:3, -1]
+        return J
 
 
 def getRobotModel(robot_name):

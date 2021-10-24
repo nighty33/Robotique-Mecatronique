@@ -376,14 +376,14 @@ class RobotRRR(RobotModel):
         sols = []
 
         for q in [q1, q1+np.pi]:
-            x_1_2, y_1_2 , z_1_2 , o_1_2 = (ht.invert_transform(self.T_0_1) @ ht.invert_transform(self.T_1_2) @ ht.rot_z(q) @ np.concatenate((target[:3],[1])))
+            x_1_2, y_1_2 , z_1_2 , o_1_2 = (ht.invert_transform(self.T_0_1) @ ht.rot_z(q) @ np.concatenate((target[:3],[1])))
 
-            dist = math.sqrt(y_1_2**2+z_1_2**2)
+            dist = math.sqrt((y_1_2-self.L1)**2+z_1_2**2)
             if (dist < abs(self.L2 - self.L3)) or dist > (self.L2 + self.L3):
                 break
             else:
-                a , b , nb = self.cosine(y_1_2,z_1_2 , self.L2 , self.L3)
-                phi = math.atan2(z_1_2, y_1_2)
+                a , b , nb = self.cosine(y_1_2 -self.L1,z_1_2 , self.L2 , self.L3)
+                phi = math.atan2(z_1_2, y_1_2 - self.L1)
                 sols.append([q,phi-a, np.pi - b])
                 sols.append([q,phi+a,b-np.pi])
                 nb_sol+=nb

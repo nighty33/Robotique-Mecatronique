@@ -2,33 +2,12 @@ import numpy as np
 from abc import abstractmethod
 
 from numpy import random
+from numpy.linalg.linalg import solve
 import homogeneous_transform as ht
 import math
+import test as t
 
 from scipy import optimize
-
-
-
-tol = 1e-9
-
-def cosine_rule(x,y,z, L0, L1 , L2 , L3):
-    solutions = []
-    dist = math.sqrt((abs(y-L1))**2+abs((z-L0))**2)
-
-    if dist > (L1 + L2) or (dist < abs(L1 - L2)):
-        return solutions
-    
-    phi = math.atan2(y, z)
-    alpha = math.acos((L1**2+dist**2 - L2**2) / (2*L1* dist))
-    beta = math.acos((L1**2+ L2**2 - dist**2) / (2*L1* L2))
-    solutions.append(np.array([phi+alpha, beta - np.pi]))
-
-    if dist != L1 + L2:
-        solutions.append(np.array([ phi-alpha, np.pi - beta]))
-
-    #print("Dist:" , dist , "phi" , phi , "alpha" , alpha , "beta" , beta)
-    return solutions
-
 
 class RobotModel:
     def getNbJoints(self):
@@ -176,12 +155,21 @@ class RobotModel:
         """
         if method == "analyticalMGI":
             nb_sols, sol = self.analyticalMGI(target)
+            t.test_analytical(target, sol, getRobotModel(self.getRobotName()))
             return sol
         elif method == "jacobianInverse":
             return self.solveJacInverse(joints, target)
         elif method == "jacobianTransposed":
             return self.solveJacTransposed(joints, target)
         raise RuntimeError("Unknown method: " + method)
+
+    @abstractmethod
+    def getRobotName(self):
+        """
+        Returns
+        -------
+        robot_name : name of the robot
+        """
 
     def solveJacInverse(self, joints, target):
         """
@@ -233,7 +221,6 @@ class RobotModel:
     def solveJacTransposed(self, joints, target):
 
         result = optimize.minimize(self.distance, joints, target, jac=self.jacobian_function)
-
         return result.x
 
 
@@ -253,6 +240,9 @@ class RobotRT(RobotModel):
         self.T_0_1 = ht.translation([0, 0, self.L0+self.W/2])
         self.T_1_2 = ht.translation([self.L1, 0, 0])
         self.T_2_E = ht.translation([0.0, -self.L2, 0]) @ ht.rot_z(np.pi)
+
+    def getRobotName(self):
+        return "RobotRT"
 
     def getJointsNames(self):
         return ["q1", "q2"]
@@ -322,6 +312,9 @@ class RobotRRR(RobotModel):
         self.T_2_3 = ht.translation([0.0, self.L2, 0])
         self.T_3_E = ht.translation([0.0, self.L3, 0])
 
+    def getRobotName(self):
+        return "RobotRRR"
+
     def getJointsNames(self):
         return ["q1", "q2", "q3"]
 
@@ -348,25 +341,55 @@ class RobotRRR(RobotModel):
         tool_pos = self.getBaseFromToolTransform(q) @ np.array([0, 0, 0, 1])
         return tool_pos[:3]
 
+    def cosine(self,x,y,L1,L2):
+        D = math.sqrt(x**2+y**2)
+        alpha = math.acos( (L1**2 + D**2 - L2**2) / (2*L1*D) )
+        beta = math.acos( (L1**2 + L2**2 - D**2) / (2*L2*L1) )
+        nb_sol = 2
+
+        if(D == L1 + L2):
+            nb_sol = 1
+
+        return alpha , beta , nb_sol
+
     def analyticalMGI(self, target):
-        x=target[0] 
-        y=target[1] 
-        z=target[2] 
 
-        theta = math.atan2(x, y)
-        joints = []
-        dist = np.linalg.norm(target[:2])
+        x =target[0]
+        y =target[1]
+        z =target[2]
 
-        for q0 in [theta, theta - np.pi]:
-            for q in cosine_rule(x, y, z, self.L0, self.L1 , self.L2 , self.L3):
-                joints.append(np.array([-q0 , -q[0] , -q[1]]))
-        
-        if len(joints) == 0:
-            return 0, [0,0,0]
-            
-        #print(joints[0][0],joints[0][1],joints[0][2])
-        #print(len(joints))
-        return len(joints), np.array(joints[0], dtype=np.double)
+        x_lim , y_lim , z_lim = self.getOperationalDimensionLimits()
+
+        if(x < x_lim[0] or x > x_lim[1]
+            or y < y_lim[0] or y > y_lim[1]
+            or z < z_lim[0] or z > z_lim[1]):
+            print("too far")
+            return 0 , [0,0,0]
+
+        q1 = np.pi/2 - math.atan2(y,x)
+
+        nb_sol = 0
+        sols = []
+
+        for q in [q1, q1+np.pi]:
+            x_1_2, y_1_2 , z_1_2 , o_1_2 = (ht.invert_transform(self.T_0_1) @ ht.invert_transform(self.T_1_2) @ ht.rot_z(q) @ np.concatenate((target[:3],[1])))
+
+            dist = math.sqrt(y_1_2**2+z_1_2**2)
+            if (dist < abs(self.L2 - self.L3)) or dist > (self.L2 + self.L3):
+                break
+            else:
+                a , b , nb = self.cosine(y_1_2,z_1_2 , self.L2 , self.L3)
+                phi = math.atan2(z_1_2, y_1_2)
+                sols.append([q,phi-a, np.pi - b])
+                sols.append([q,phi+a,b-np.pi])
+                nb_sol+=nb
+
+        if(len(sols)== 0):
+            print("any solutions")
+            return 0 , None
+
+        joints = [-sols[1][0],sols[1][1],sols[1][2]]
+        return nb_sol , np.array(joints , dtype=np.double)
 
     def computeJacobian(self, joints):
         # TODO: implement
@@ -406,6 +429,9 @@ class LegRobot(RobotModel):
         self.T_2_3 = ht.translation([0.0, self.L2, 0])
         self.T_3_4 = ht.translation([0.0, self.L3, 0])
         self.T_4_E = ht.translation([0.0, self.L4, 0])
+
+    def getRobotName(self):
+        return "LegRobot"
 
     def getJointsNames(self):
         return ["q1", "q2", "q3", "q4"]
@@ -448,9 +474,50 @@ class LegRobot(RobotModel):
         T = self.getBaseFromToolTransform(joints)
         return np.append(T[:-1, -1], T[1,2])
 
+    def cosine(self,x,y,L1,L2):
+        D = math.sqrt(x**2+y**2)
+        dist = math.sqrt(x**2+y**2)
+        if (dist < abs(L1 - L2)) or dist > (L1 + L2):
+            return 0,0,0
+        alpha = math.acos( (L1**2 + D**2 - L2**2) / (2*L1*D) )
+        beta = math.acos( (L1**2 + L2**2 - D**2) / (2*L2*L1) )
+        nb_sol = 2
+
+        if(D == L1 + L2):
+            nb_sol = 1
+
+        return alpha , beta , nb_sol
+    
     def analyticalMGI(self, target):
-        # TODO: implement
-        raise NotImplementedError()
+        sols = []
+        nb_sols=0
+        theta = np.pi/2 - math.atan2(target[1],target[0])
+        for q0 in [theta, theta + np.pi]:
+            x_1_2 , y_1_2 , z_1_2 , o_1_2 = ht.rot_z(q0) @ ht.invert_transform(self.T_0_1) @ np.concatenate((target[:3],[1]))        
+
+            r3_2 = -math.asin(target[3])
+
+            y3_1_2 = y_1_2 - math.cos(r3_2) * self.L4 - self.L1
+            z3_1_2 = z_1_2 - math.sin(r3_2) * self.L4
+
+            dist = math.sqrt(y3_1_2**2+z3_1_2**2)
+            if (dist < abs(self.L2 - self.L3)) or dist > (self.L2 + self.L3):
+                break
+            else:
+                a , b , sol = self.cosine(y3_1_2 , z3_1_2 , self.L2 , self.L3)
+                phi = math.atan2(z3_1_2,y3_1_2 )
+                alpha = phi + a
+                beta = b - np.pi
+                alpha2 = phi -a
+                beta2 = np.pi - b
+                q3 = r3_2 - alpha - beta
+                sols.append([-q0,alpha,beta,q3])
+                sols.append([-q0,alpha2,beta2,q3])
+                nb_sols+= sol
+            
+        if nb_sols == 0:
+            return 0, None
+        return nb_sols, sols[0]
 
     def computeJacobian(self, joints):
         # TODO: implement

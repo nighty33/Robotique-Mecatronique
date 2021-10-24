@@ -155,12 +155,16 @@ class RobotModel:
         """
         if method == "analyticalMGI":
             nb_sols, sol = self.analyticalMGI(target)
-            t.test_analytical(target, sol, getRobotModel(self.getRobotName()))
+            t.test_method(target, sol, getRobotModel(self.getRobotName()))
             return sol
         elif method == "jacobianInverse":
-            return self.solveJacInverse(joints, target)
+            ret = self.solveJacInverse(joints, target)
+            t.test_method(target, ret, getRobotModel(self.getRobotName()))
+            return ret
         elif method == "jacobianTransposed":
-            return self.solveJacTransposed(joints, target)
+            ret = self.solveJacTransposed(joints, target)
+            t.test_method(target, ret, getRobotModel(self.getRobotName()))
+            return ret
         raise RuntimeError("Unknown method: " + method)
 
     @abstractmethod

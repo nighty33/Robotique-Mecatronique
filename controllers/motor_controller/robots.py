@@ -263,7 +263,7 @@ class RobotRT(RobotModel):
         return ["x", "y"]
 
     def getOperationalDimensionLimits(self):
-        dimension = math.sqrt(self.L2**2 + self.L1**2)
+        dimension = math.sqrt((self.L2-self.W/2)**2 + (self.L1+self.max_q1)**2)
 
         return np.array([[-dimension, dimension],  [-dimension, dimension]])
 
@@ -281,14 +281,14 @@ class RobotRT(RobotModel):
         y = target[1]
 
         dist = np.linalg.norm(target[:2])
-        min = math.sqrt(self.max_q1**2 + self.L1**2)
-        max = math.sqrt(self.max_q1**2 + (self.L1+self.max_q1)**2 )
+        min = math.sqrt((self.L2-self.W/2)**2- + self.L1**2) + 0.001
+        max = math.sqrt((self.L2-self.W/2)**2 + (self.L1+self.max_q1)**2 )
         if dist < min or dist > max:
             return 0 , None
 
-        angle1 = math.atan2(self.max_q1, x)
-        dist_cur = math.sqrt( (dist**2) - (x**2))
-        angle2= math.atan2(y,dist_cur)
+        angle1 = math.atan2(y, x)
+        dist_cur = math.sqrt( (dist**2) - (self.L2**2))
+        angle2= math.atan2(self.L2,dist_cur)
         return 1, [angle1+angle2, dist_cur-self.L1]
 
     def computeJacobian(self, joints):
@@ -381,14 +381,14 @@ class RobotRRR(RobotModel):
         sols = []
 
         for q in [q1, q1+np.pi]:
-            x_1_2, y_1_2 , z_1_2 , o_1_2 = (ht.invert_transform(self.T_0_1) @ ht.rot_z(q) @ np.concatenate((target[:3],[1])))
+            x_0_1, y_0_1 , z_0_1 , o_0_1 = (ht.invert_transform(self.T_0_1) @ ht.rot_z(q) @ np.concatenate((target[:3],[1])))
 
-            dist = math.sqrt((y_1_2-self.L1)**2+z_1_2**2)
+            dist = math.sqrt((y_0_1-self.L1)**2+z_0_1**2)
             if (dist < abs(self.L2 - self.L3)) or dist > (self.L2 + self.L3):
                 break
             else:
-                a , b , nb = self.cosine(y_1_2 -self.L1,z_1_2 , self.L2 , self.L3)
-                phi = math.atan2(z_1_2, y_1_2 - self.L1)
+                a , b , nb = self.cosine(y_0_1 -self.L1,z_0_1 , self.L2 , self.L3)
+                phi = math.atan2(z_0_1, y_0_1 - self.L1)
                 sols.append([q,phi-a, np.pi - b])
                 sols.append([q,phi+a,b-np.pi])
                 nb_sol+=nb
@@ -507,19 +507,19 @@ class LegRobot(RobotModel):
         nb_sols=0
         theta = np.pi/2 - math.atan2(target[1],target[0])
         for q0 in [theta, theta + np.pi]:
-            x_1_2 , y_1_2 , z_1_2 , o_1_2 = ht.rot_z(q0) @ ht.invert_transform(self.T_0_1) @ np.concatenate((target[:3],[1]))        
+            x_0_1 , y_0_1 , z_0_1 , o_0_1 = ht.rot_z(q0) @ ht.invert_transform(self.T_0_1) @ np.concatenate((target[:3],[1]))        
 
             r3_2 = -math.asin(target[3])
 
-            y3_1_2 = y_1_2 - math.cos(r3_2) * self.L4 - self.L1
-            z3_1_2 = z_1_2 - math.sin(r3_2) * self.L4
+            y3_0_1 = y_0_1 - math.cos(r3_2) * self.L4 - self.L1
+            z3_0_1 = z_0_1 - math.sin(r3_2) * self.L4
 
-            dist = math.sqrt(y3_1_2**2+z3_1_2**2)
+            dist = math.sqrt(y3_0_1**2+z3_0_1**2)
             if (dist < abs(self.L2 - self.L3)) or dist > (self.L2 + self.L3):
                 break
             else:
-                a , b , sol = self.cosine(y3_1_2 , z3_1_2 , self.L2 , self.L3)
-                phi = math.atan2(z3_1_2,y3_1_2 )
+                a , b , sol = self.cosine(y3_0_1 , z3_0_1 , self.L2 , self.L3)
+                phi = math.atan2(z3_0_1,y3_0_1 )
                 alpha = phi + a
                 beta = b - np.pi
                 alpha2 = phi -a

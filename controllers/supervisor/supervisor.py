@@ -8,9 +8,9 @@ import csv
 import os
 from controller import Supervisor, Node
 
-DEFAULT_ROBOT = 'RobotRT'
-# DEFAULT_ROBOT = 'RobotRRR'
-# DEFAULT_ROBOT = 'LegRobot'
+#DEFAULT_ROBOT = 'RobotRT'
+DEFAULT_ROBOT = 'RobotRRR'
+#DEFAULT_ROBOT = 'LegRobot'
 DEFAULT_DURATION = 2.0    # [s]
 DEFAULT_AUTO_EXIT = 0      # Simulation is killed when duration is reached [0: off, 1: on]
 DEFAULT_AUTO_STOP = 1      # Simulation is paused when duration is reached [0: off, 1: on]

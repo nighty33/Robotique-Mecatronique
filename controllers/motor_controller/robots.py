@@ -225,7 +225,12 @@ class RobotModel:
         size = len(joints)
         J = self.computeJacobian(joints)
         v_dist = (target - self.computeMGD(joints))
-        return -2 * J.transpose() @ v_dist
+
+        if(J.shape[0] == J.shape[1]):
+            ret = -2 * J.transpose() @ v_dist
+        else:
+            ret = -2 * J.transpose() @ v_dist[:-1]
+        return ret
 
     def solveJacTransposed(self, joints, target):
 

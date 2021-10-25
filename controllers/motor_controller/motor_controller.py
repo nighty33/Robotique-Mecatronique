@@ -24,7 +24,7 @@ DEFAULT_ROBOT = 'RobotRRR'
 control_mode = os.environ.get('CONTROL_MODE', DEFAULT_CONTROL_MODE)
 robot_name = os.environ.get('ROBOT_NAME', DEFAULT_ROBOT)
 
-default_rt_target = [0.2,-0.25]
+default_rt_target = [0.3,0.3]
 default_rrr_target = [0.6, 0.3, 1.0]
 default_leg_target = [0.0, 0.7, 0.6, -1.0]
 robot_targets = {

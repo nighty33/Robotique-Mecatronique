@@ -279,11 +279,11 @@ class RobotRT(RobotModel):
         min = math.sqrt(self.max_q1**2 + self.L1**2)
         max = math.sqrt(self.max_q1**2 + (self.L1+self.max_q1)**2 )
         if dist < min or dist > max:
-            return 0 , [0,0]
+            return 0 , None
 
-        angle1 = math.atan2(y, x)
-        dist_cur = math.sqrt( (dist**2) - (self.max_q1**2))
-        angle2= math.atan2(self.max_q1,dist_cur)
+        angle1 = math.atan2(self.max_q1, x)
+        dist_cur = math.sqrt( (dist**2) - (x**2))
+        angle2= math.atan2(y,dist_cur)
         return 1, [angle1+angle2, dist_cur-self.L1]
 
     def computeJacobian(self, joints):
@@ -392,7 +392,8 @@ class RobotRRR(RobotModel):
             print("any solutions")
             return 0 , None
 
-        joints = [-sols[1][0],sols[1][1],sols[1][2]]
+        joints = [-sols[0][0],sols[0][1],sols[0][2]]
+        
         return nb_sol , np.array(joints , dtype=np.double)
 
     def computeJacobian(self, joints):
@@ -471,7 +472,12 @@ class LegRobot(RobotModel):
            An homogeneous transformation matrix
         """
         # TODO: implement
-        return 
+        new = np.zeros(4, dtype=np.double)
+        new[0] = T[0,3]
+        new[1] = T[1,3]
+        new[2] = T[2,3]
+        new[3] = T[2,1]
+        return new
 
     def computeMGD(self, joints):
         # TODO: implement
@@ -480,8 +486,7 @@ class LegRobot(RobotModel):
 
     def cosine(self,x,y,L1,L2):
         D = math.sqrt(x**2+y**2)
-        dist = math.sqrt(x**2+y**2)
-        if (dist < abs(L1 - L2)) or dist > (L1 + L2):
+        if (D < abs(L1 - L2)) or D > (L1 + L2):
             return 0,0,0
         alpha = math.acos( (L1**2 + D**2 - L2**2) / (2*L1*D) )
         beta = math.acos( (L1**2 + L2**2 - D**2) / (2*L2*L1) )

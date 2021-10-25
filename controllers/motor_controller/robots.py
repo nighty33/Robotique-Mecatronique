@@ -208,7 +208,12 @@ class RobotModel:
                         a[i] = np.random.uniform(0.0, 0.01)
                     joints = joints + a
             else:
-                raise RuntimeError("Matrix non-invertible: '" + J + "'")
+                inv_J = np.linalg.pinv(J)
+                v_dist = (target - self.computeMGD(joints))[:-1]
+                epsilon = inv_J @ v_dist
+                if np.linalg.norm(epsilon) > max_step:
+                    epsilon = epsilon/np.linalg.norm(epsilon)*max_step
+                joints = joints + epsilon
             iter+=1
 
         return joints
